@@ -446,9 +446,11 @@ def get_series(
     include_forecast: bool = True,
 ) -> tuple[pd.Series, pd.Series, str, str]:
     """
-    Fetch the best available annual series for country + indicator.
-    Returns (historical, forecast, unit, source_used).
-    forecast is empty if no forecast is available.
+    Robust version:
+    - Tries ALL possible sources for the indicator
+    - Keeps the first non-empty historical series
+    - Keeps the first non-empty forecast series (WEO only)
+    - Guarantees fallback across WEO → ECB → WB → IFS
     """
     cfg  = INDICATORS[indicator]
     ccfg = COUNTRIES[country]
@@ -456,78 +458,81 @@ def get_series(
     sources = cfg.get("sources", [])
 
     empty = pd.Series(dtype=float)
+    hist_candidates = []
+    fcast_candidates = []
+    source_labels = []
 
-    # ── Oil prices (country-independent) ────────────────────────────────────
+    # --- Oil prices (country-independent) ---
     if "brent" in sources:
         s = clip_years(fetch_fred_annual("DCOILBRENTEU"), start_yr, end_yr)
         return s, empty, unit, "FRED"
+
     if "wti" in sources:
         s = clip_years(fetch_fred_annual("DCOILWTICO"), start_yr, end_yr)
         return s, empty, unit, "FRED"
 
-    # ── IMF WEO (headline inflation, includes forecasts) ─────────────────────
+    # --- IMF WEO (includes forecasts) ---
     if "weo" in sources:
         weo_iso = ccfg.get("weo")
-        if not weo_iso:
-            return empty, empty, unit, "—"
-        ann, last_actual = fetch_imf_weo(cfg["weo_code"], weo_iso)
-        if ann.empty:
-            return empty, empty, unit, "—"
-        # For "CPI Inflation" indicator: use WEO for history too (best coverage)
-        # For "Inflation Forecast" indicator: always include forecast portion
-        cut  = pd.Period(last_actual, freq="Y")
-        hist = clip_years(ann[ann.index <= cut], start_yr, end_yr)
-        if include_forecast:
-            fcast = clip_years(ann[ann.index > cut], start_yr, end_yr)
-        else:
-            fcast = empty
-        # If no history from WEO, try World Bank as fallback
-        if hist.empty and "wb" in sources:
-            wb_code = cfg.get("wb_code")
-            if wb_code:
-                wb = fetch_world_bank(ccfg["iso2"], wb_code, start_yr, end_yr)
-                if not wb.empty:
-                    hist = clip_years(wb, start_yr, end_yr)
-                    return hist, fcast, unit, "World Bank + IMF WEO"
-        return hist, fcast, unit, "IMF WEO"
+        if weo_iso:
+            ann, last_actual = fetch_imf_weo(cfg["weo_code"], weo_iso)
+            if not ann.empty:
+                cut = pd.Period(last_actual, freq="Y")
+                hist = clip_years(ann[ann.index <= cut], start_yr, end_yr)
+                fcast = clip_years(ann[ann.index > cut], start_yr, end_yr) if include_forecast else empty
+                if not hist.empty:
+                    hist_candidates.append(hist)
+                    fcast_candidates.append(fcast)
+                    source_labels.append("IMF WEO")
 
-    compute = cfg.get("compute", "yoy")
+    # --- ECB HICP (preferred for Euro area) ---
+    if "ecb" in sources and prefer_ecb:
+        ecb_code = ccfg.get("ecb")
+        comp = cfg.get("ecb_comp")
+        meas = cfg.get("ecb_meas", "ANR")
+        compute = cfg.get("compute", "yoy")
 
-    # ── ECB HICP (preferred for Euro area countries) ─────────────────────────
-    ecb_code = ccfg.get("ecb")
-    ecb_comp = cfg.get("ecb_comp")
-    ecb_meas = cfg.get("ecb_meas", "ANR")
-
-    if prefer_ecb and "ecb" in sources and ecb_code and ecb_comp:
-        # If compute=="yoy" and measure is ANR, ECB already returns % change
-        if compute == "yoy":
-            raw = fetch_ecb_annual(ecb_code, ecb_comp, "ANR", start_yr - 1, end_yr)
+        if ecb_code and comp:
+            raw = fetch_ecb_annual(ecb_code, comp, meas, start_yr - 1, end_yr)
             if not raw.empty:
-                s = yoy_from_index(raw) if ecb_meas != "ANR" else raw
-                return clip_years(s, start_yr, end_yr), empty, unit, "ECB"
-        else:
-            raw = fetch_ecb_annual(ecb_code, ecb_comp, ecb_meas, start_yr, end_yr)
-            if not raw.empty:
-                return clip_years(raw, start_yr, end_yr), empty, unit, "ECB"
+                if compute == "yoy" and meas != "ANR":
+                    raw = yoy_from_index(raw)
+                hist = clip_years(raw, start_yr, end_yr)
+                if not hist.empty:
+                    hist_candidates.append(hist)
+                    fcast_candidates.append(empty)
+                    source_labels.append("ECB")
 
-    # ── World Bank (annual, good coverage) ───────────────────────────────────
+    # --- World Bank WDI ---
     if "wb" in sources:
         wb_code = cfg.get("wb_code")
         if wb_code:
             wb = fetch_world_bank(ccfg["iso2"], wb_code, start_yr, end_yr)
             if not wb.empty:
-                return clip_years(wb, start_yr, end_yr), empty, unit, "World Bank"
+                hist_candidates.append(wb)
+                fcast_candidates.append(empty)
+                source_labels.append("World Bank")
 
-    # ── IMF IFS annual (CPI/PPI components) ──────────────────────────────────
+    # --- IMF IFS ---
     if "ifs" in sources:
         ifs_code = cfg.get("ifs_code")
-        iso2     = ccfg.get("iso2")
+        iso2 = ccfg.get("iso2")
+        compute = cfg.get("compute", "yoy")
+
         if ifs_code and iso2:
             ext = start_yr - 2 if compute == "yoy" else start_yr
             raw = fetch_imf_ifs_annual(iso2, ifs_code, ext, end_yr)
             if not raw.empty:
                 s = yoy_from_index(raw) if compute == "yoy" else raw
-                return clip_years(s, start_yr, end_yr), empty, unit, "IMF IFS"
+                hist = clip_years(s, start_yr, end_yr)
+                if not hist.empty:
+                    hist_candidates.append(hist)
+                    fcast_candidates.append(empty)
+                    source_labels.append("IMF IFS")
+
+    # --- Final selection ---
+    if hist_candidates:
+        return hist_candidates[0], fcast_candidates[0], unit, source_labels[0]
 
     return empty, empty, unit, "—"
 
