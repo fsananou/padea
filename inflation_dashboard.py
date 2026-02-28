@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-CPI & Oil Price Dashboard
-Sources: IMF World Economic Outlook (CPI) · FRED (Brent / WTI crude oil)
+Data Board — Macro & Financial Reference Data for Accounting Professionals
+Sources: IMF WEO · FRED · Yahoo Finance
 """
 
 # ── Auto-launch when executed directly ────────────────────────────────────────
@@ -14,7 +14,6 @@ if __name__ == "__main__" and "streamlit" not in sys.modules:
     )
     sys.exit(0)
 
-# ── Imports ────────────────────────────────────────────────────────────────────
 import io
 from datetime import datetime
 
@@ -28,100 +27,70 @@ from plotly.subplots import make_subplots
 # PAGE CONFIG
 # ─────────────────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="CPI & Oil Dashboard",
-    page_icon="🌍",
+    page_title="Data Board",
+    page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# ── Dark / glassmorphism CSS ───────────────────────────────────────────────────
 st.markdown("""
 <style>
-/* ── Global background ─────────────────────────────────────────────────────── */
 [data-testid="stAppViewContainer"] > .main {
     background: linear-gradient(160deg, #07101f 0%, #0c1a2e 60%, #07101f 100%);
 }
-/* ── Sidebar ────────────────────────────────────────────────────────────────── */
 [data-testid="stSidebar"] > div:first-child {
     background: linear-gradient(180deg, #0b1726 0%, #0e2038 100%);
     border-right: 1px solid rgba(56,189,248,0.1);
 }
 [data-testid="stSidebar"] label,
 [data-testid="stSidebar"] p,
-[data-testid="stSidebar"] span,
-[data-testid="stSidebar"] .stSelectbox label {
+[data-testid="stSidebar"] span {
     color: rgba(226,232,240,0.85) !important;
 }
-/* ── Tabs ────────────────────────────────────────────────────────────────────── */
 .stTabs [data-baseweb="tab-list"] {
-    gap: 6px;
-    background: rgba(255,255,255,0.025);
-    border-radius: 14px;
-    padding: 6px;
+    gap: 5px; background: rgba(255,255,255,0.025);
+    border-radius: 14px; padding: 5px;
     border: 1px solid rgba(56,189,248,0.1);
 }
 .stTabs [data-baseweb="tab"] {
-    border-radius: 10px;
-    padding: 8px 22px;
-    color: rgba(226,232,240,0.45);
-    font-weight: 500;
-    font-size: 0.9rem;
-    letter-spacing: 0.02em;
-    transition: all .2s ease;
+    border-radius: 10px; padding: 7px 16px;
+    color: rgba(226,232,240,0.45); font-weight: 500;
+    font-size: 0.87rem; letter-spacing: 0.02em;
 }
 .stTabs [aria-selected="true"] {
-    background: linear-gradient(135deg, rgba(56,189,248,0.18), rgba(99,102,241,0.14)) !important;
+    background: linear-gradient(135deg,rgba(56,189,248,0.18),rgba(99,102,241,0.14)) !important;
     color: #38BDF8 !important;
     border: 1px solid rgba(56,189,248,0.28) !important;
 }
-/* ── Metric cards ────────────────────────────────────────────────────────────── */
 [data-testid="stMetric"] {
     background: rgba(255,255,255,0.03);
     border: 1px solid rgba(56,189,248,0.12);
-    border-radius: 16px;
-    padding: 1rem 1.3rem;
-    backdrop-filter: blur(8px);
+    border-radius: 16px; padding: 1rem 1.3rem;
 }
 [data-testid="stMetric"] label {
     color: rgba(148,163,184,0.85) !important;
     font-size: 0.72rem !important;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
+    text-transform: uppercase; letter-spacing: 0.08em;
 }
 [data-testid="stMetricValue"] {
-    color: #38BDF8 !important;
-    font-size: 1.75rem !important;
-    font-weight: 700 !important;
+    color: #38BDF8 !important; font-size: 1.75rem !important; font-weight: 700 !important;
 }
-/* ── Dividers & headings ─────────────────────────────────────────────────────── */
 hr { border-color: rgba(56,189,248,0.1) !important; }
 h1, h2, h3, h4 { color: #e2e8f0 !important; }
 p, li { color: rgba(226,232,240,0.7) !important; }
-/* ── Block container ─────────────────────────────────────────────────────────── */
 .block-container { padding-top: 1.6rem; padding-bottom: 2rem; }
-/* ── Expanders ───────────────────────────────────────────────────────────────── */
 [data-testid="stExpander"] {
     background: rgba(255,255,255,0.02);
     border: 1px solid rgba(56,189,248,0.1) !important;
     border-radius: 12px;
 }
-/* ── Progress bar ────────────────────────────────────────────────────────────── */
-[data-testid="stProgress"] > div > div {
-    background: linear-gradient(90deg, #38BDF8, #818CF8);
-}
-/* ── DataFrames ──────────────────────────────────────────────────────────────── */
-[data-testid="stDataFrame"] {
-    border: 1px solid rgba(56,189,248,0.1);
-    border-radius: 10px;
-}
 </style>
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# COUNTRY CATALOG  (weo = IMF WEO ISO-3 or area code)
+# COUNTRY CATALOG
 # ─────────────────────────────────────────────────────────────────────────────
 COUNTRIES: dict[str, dict] = {
-    # ── Advanced ───────────────────────────────────────────────────────────────
     "United States":   {"weo": "USA"},
     "Euro Area":       {"weo": "EURO"},
     "Germany":         {"weo": "DEU"},
@@ -152,13 +121,11 @@ COUNTRIES: dict[str, dict] = {
     "Norway":          {"weo": "NOR"},
     "Denmark":         {"weo": "DNK"},
     "Iceland":         {"weo": "ISL"},
-    # ── Eastern Europe ────────────────────────────────────────────────────────
     "Poland":          {"weo": "POL"},
     "Czech Republic":  {"weo": "CZE"},
     "Hungary":         {"weo": "HUN"},
     "Romania":         {"weo": "ROU"},
     "Bulgaria":        {"weo": "BGR"},
-    # ── Asia-Pacific ──────────────────────────────────────────────────────────
     "China":           {"weo": "CHN"},
     "India":           {"weo": "IND"},
     "South Korea":     {"weo": "KOR"},
@@ -170,7 +137,6 @@ COUNTRIES: dict[str, dict] = {
     "Singapore":       {"weo": "SGP"},
     "Pakistan":        {"weo": "PAK"},
     "Bangladesh":      {"weo": "BGD"},
-    # ── Latin America ─────────────────────────────────────────────────────────
     "Brazil":          {"weo": "BRA"},
     "Mexico":          {"weo": "MEX"},
     "Argentina":       {"weo": "ARG"},
@@ -182,7 +148,6 @@ COUNTRIES: dict[str, dict] = {
     "Uruguay":         {"weo": "URY"},
     "Paraguay":        {"weo": "PRY"},
     "Venezuela":       {"weo": "VEN"},
-    # ── Middle East & North Africa ────────────────────────────────────────────
     "Saudi Arabia":    {"weo": "SAU"},
     "UAE":             {"weo": "ARE"},
     "Turkey":          {"weo": "TUR"},
@@ -196,7 +161,6 @@ COUNTRIES: dict[str, dict] = {
     "Iraq":            {"weo": "IRQ"},
     "Jordan":          {"weo": "JOR"},
     "Lebanon":         {"weo": "LBN"},
-    # ── Sub-Saharan Africa ────────────────────────────────────────────────────
     "South Africa":    {"weo": "ZAF"},
     "Nigeria":         {"weo": "NGA"},
     "Kenya":           {"weo": "KEN"},
@@ -211,11 +175,77 @@ COUNTRIES: dict[str, dict] = {
     "Angola":          {"weo": "AGO"},
     "Zambia":          {"weo": "ZMB"},
     "Zimbabwe":        {"weo": "ZWE"},
-    # ── CIS ───────────────────────────────────────────────────────────────────
     "Russia":          {"weo": "RUS"},
     "Ukraine":         {"weo": "UKR"},
     "Kazakhstan":      {"weo": "KAZ"},
     "Uzbekistan":      {"weo": "UZB"},
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WORLD MAP INDICATOR CONFIG
+# ─────────────────────────────────────────────────────────────────────────────
+MAP_INDICATORS: dict[str, dict] = {
+    "CPI Inflation (%)": {
+        "weo_code": "PCPIPCH",
+        "colorscale": [
+            [0.00, "#0D9488"], [0.20, "#4ADE80"], [0.38, "#FEF08A"],
+            [0.55, "#FB923C"], [0.75, "#EF4444"], [1.00, "#7F1D1D"],
+        ],
+        "zmin": -5, "zmax": 30, "unit": "%",
+    },
+    "Real GDP Growth (%)": {
+        "weo_code": "NGDP_RPCH",
+        "colorscale": [
+            [0.00, "#7F1D1D"], [0.22, "#EF4444"], [0.40, "#FEF08A"],
+            [0.52, "#86EFAC"], [0.72, "#22C55E"], [1.00, "#14532D"],
+        ],
+        "zmin": -15, "zmax": 15, "unit": "%",
+    },
+    "Unemployment Rate (%)": {
+        "weo_code": "LUR",
+        "colorscale": [
+            [0.00, "#F0FDF4"], [0.25, "#86EFAC"],
+            [0.55, "#F97316"], [1.00, "#7F1D1D"],
+        ],
+        "zmin": 0, "zmax": 30, "unit": "%",
+    },
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FRED SERIES
+# ─────────────────────────────────────────────────────────────────────────────
+POLICY_SERIES: dict[str, str] = {
+    "Fed Funds Rate":     "FEDFUNDS",        # US policy rate
+    "ECB Deposit Rate":   "ECBDFR",          # ECB deposit facility rate
+    "3M USD LIBOR":       "USD3MTD156N",      # 3-month USD interbank
+    "3M EURIBOR":         "EUR3MTD156N",      # 3-month EUR interbank
+}
+YIELD_SERIES: dict[str, str] = {
+    "US 10Y Treasury":    "GS10",
+    "Euro Area 10Y":      "IRLTLT01EZM156N",
+    "UK 10Y Gilt":        "IRLTLT01GBM156N",
+    "Japan 10Y Bond":     "IRLTLT01JPM156N",
+}
+SPREAD_SERIES: dict[str, str] = {
+    "US IG Corp OAS":     "BAMLC0A0CM",
+    "US HY Corp OAS":     "BAMLH0A0HYM2",
+    "Euro HY OAS":        "BAMLHE00EHY0EY",
+}
+FX_SERIES: dict[str, str] = {
+    "EUR / USD":          "DEXUSEU",   # USD per 1 EUR
+    "GBP / USD":          "DEXUSUK",   # USD per 1 GBP
+    "JPY / USD":          "DEXJPUS",   # JPY per 1 USD
+    "CNY / USD":          "DEXCHUS",   # CNY per 1 USD
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EQUITY INDICES (Yahoo Finance)
+# ─────────────────────────────────────────────────────────────────────────────
+EQUITY_TICKERS: dict[str, str] = {
+    "S&P 500":       "^GSPC",
+    "CAC 40":        "^FCHI",
+    "Euro Stoxx 50": "^STOXX50E",
+    "Nikkei 225":    "^N225",
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -234,15 +264,15 @@ PALETTE = [
 # ─────────────────────────────────────────────────────────────────────────────
 
 @st.cache_data(ttl=86_400, show_spinner=False)
-def fetch_imf_weo(weo_iso: str) -> tuple[pd.Series, int]:
-    """IMF WEO CPI for a single country. Returns (series, last_actual_year)."""
+def fetch_weo_series(weo_code: str, weo_iso: str) -> tuple[pd.Series, int]:
+    """IMF WEO: any indicator for a single country. Returns (series, last_actual_year)."""
     try:
-        r = requests.get(f"{WEO_URL}/PCPIPCH/{weo_iso}", timeout=30)
+        r = requests.get(f"{WEO_URL}/{weo_code}/{weo_iso}", timeout=30)
         r.raise_for_status()
         data = r.json()
-        vals = data.get("values", {}).get("PCPIPCH", {}).get(weo_iso, {})
+        vals = data.get("values", {}).get(weo_code, {}).get(weo_iso, {})
         last_actual = int(
-            data.get("info", {}).get("PCPIPCH", {}).get(
+            data.get("info", {}).get(weo_code, {}).get(
                 "lastActual", str(datetime.now().year - 1)
             )
         )
@@ -262,18 +292,15 @@ def fetch_imf_weo(weo_iso: str) -> tuple[pd.Series, int]:
 
 
 @st.cache_data(ttl=86_400, show_spinner=False)
-def fetch_weo_all_countries() -> tuple[pd.DataFrame, int]:
-    """
-    Fetch CPI for ALL countries in one call.
-    Returns (DataFrame: index=iso3, columns=int year, last_actual_year).
-    """
+def fetch_weo_world(weo_code: str) -> tuple[pd.DataFrame, int]:
+    """IMF WEO: any indicator for ALL countries. Returns (df, last_actual_year)."""
     try:
-        r = requests.get(f"{WEO_URL}/PCPIPCH", timeout=60)
+        r = requests.get(f"{WEO_URL}/{weo_code}", timeout=60)
         r.raise_for_status()
         data = r.json()
-        vals = data.get("values", {}).get("PCPIPCH", {})
+        vals = data.get("values", {}).get(weo_code, {})
         last_actual = int(
-            data.get("info", {}).get("PCPIPCH", {}).get(
+            data.get("info", {}).get(weo_code, {}).get(
                 "lastActual", str(datetime.now().year - 1)
             )
         )
@@ -299,16 +326,41 @@ def fetch_weo_all_countries() -> tuple[pd.DataFrame, int]:
 
 @st.cache_data(ttl=3_600, show_spinner=False)
 def fetch_fred_annual(series_id: str) -> pd.Series:
-    """FRED daily oil price → annual average."""
+    """FRED: any series → annual average."""
     try:
         r = requests.get(FRED_URL, params={"id": series_id}, timeout=30)
         r.raise_for_status()
         df = pd.read_csv(io.StringIO(r.text))
-        # Column names vary ("DATE" vs "observation_date") — use positional
         df.columns = ["date", "value"]
         df["date"]  = pd.to_datetime(df["date"], errors="coerce")
         df["value"] = pd.to_numeric(df["value"], errors="coerce")
         df = df.dropna().set_index("date")
+        ann = df["value"].resample("YS").mean()
+        ann.index = ann.index.to_period("Y")
+        return ann.sort_index()
+    except Exception:
+        return pd.Series(dtype=float)
+
+
+@st.cache_data(ttl=3_600, show_spinner=False)
+def fetch_yahoo_annual(ticker: str) -> pd.Series:
+    """Yahoo Finance: equity index → annual average of monthly closes."""
+    try:
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
+        r = requests.get(
+            url,
+            params={"interval": "1mo", "range": "40y"},
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=30,
+        )
+        r.raise_for_status()
+        result = r.json()["chart"]["result"][0]
+        timestamps = result["timestamp"]
+        closes     = result["indicators"]["adjclose"][0]["adjclose"]
+        df = pd.DataFrame({
+            "date":  pd.to_datetime(timestamps, unit="s"),
+            "value": closes,
+        }).dropna().set_index("date")
         ann = df["value"].resample("YS").mean()
         ann.index = ann.index.to_period("Y")
         return ann.sort_index()
@@ -343,7 +395,7 @@ def hex_rgba(hex_color: str, alpha: float = 0.1) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CHART STYLES
+# SHARED CHART STYLES
 # ─────────────────────────────────────────────────────────────────────────────
 
 _BASE_LAYOUT = dict(
@@ -354,8 +406,7 @@ _BASE_LAYOUT = dict(
     hoverlabel=dict(
         bgcolor="rgba(13,27,42,0.95)",
         bordercolor="rgba(56,189,248,0.3)",
-        font_color="#E2E8F0",
-        font_size=13,
+        font_color="#E2E8F0", font_size=13,
     ),
     legend=dict(
         orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
@@ -364,32 +415,25 @@ _BASE_LAYOUT = dict(
     xaxis=dict(
         showgrid=True, gridcolor="rgba(255,255,255,0.04)",
         showline=True, linecolor="rgba(255,255,255,0.08)",
-        tickfont=dict(color="#64748B"),
-        zeroline=False,
+        tickfont=dict(color="#64748B"), zeroline=False,
     ),
     yaxis=dict(
         showgrid=True, gridcolor="rgba(255,255,255,0.04)",
         showline=True, linecolor="rgba(255,255,255,0.08)",
-        tickfont=dict(color="#64748B"),
-        zeroline=False,
+        tickfont=dict(color="#64748B"), zeroline=False,
     ),
-    margin=dict(l=60, r=40, t=64, b=50),
-    height=450,
+    margin=dict(l=60, r=40, t=60, b=50),
+    height=420,
 )
 
 _GEO = dict(
-    showframe=False,
-    showcoastlines=False,
+    showframe=False, showcoastlines=False,
     projection_type="natural earth",
     bgcolor="rgba(0,0,0,0)",
-    landcolor="#1E293B",
-    showland=True,
-    oceancolor="#0F172A",
-    showocean=True,
-    lakecolor="#0F172A",
-    showlakes=True,
-    showcountries=True,
-    countrycolor="rgba(255,255,255,0.08)",
+    landcolor="#1E293B", showland=True,
+    oceancolor="#0F172A", showocean=True,
+    lakecolor="#0F172A", showlakes=True,
+    showcountries=True, countrycolor="rgba(255,255,255,0.08)",
 )
 
 
@@ -398,8 +442,10 @@ _GEO = dict(
 # ─────────────────────────────────────────────────────────────────────────────
 
 def build_line_chart(
-    traces: list[dict],  # [{label, hist, fcast?, unit, color}]
-    title: str,
+    traces: list[dict],
+    title:  str,
+    hline_zero: bool = False,
+    hline_2:    bool = False,
 ) -> go.Figure:
     units = list(dict.fromkeys(
         t["unit"] for t in traces
@@ -414,16 +460,14 @@ def build_line_chart(
              unit: str, show_legend: bool = True) -> None:
         if s.empty:
             return
-        is_sec = dual and unit != u1
-        fill_color = hex_rgba(color, 0.08) if dash == "solid" and not dual else None
+        is_sec  = dual and unit != u1
+        fill_c  = hex_rgba(color, 0.07) if dash == "solid" and not dual else None
         tr = go.Scatter(
-            x=to_dt(s).index,
-            y=s.values,
-            name=name,
+            x=to_dt(s).index, y=s.values, name=name,
             line=dict(color=color, width=2.5, dash=dash),
             mode="lines",
-            fill="tozeroy" if fill_color else None,
-            fillcolor=fill_color,
+            fill="tozeroy" if fill_c else None,
+            fillcolor=fill_c,
             legendgroup=name.split(" (")[0],
             showlegend=show_legend,
             hovertemplate=f"<b>{name}</b><br>%{{x|%Y}}: %{{y:.2f}} {unit}<extra></extra>",
@@ -439,12 +483,10 @@ def build_line_chart(
         _add(fcast,      t["label"] + " (forecast)", t["color"], "dot",   t["unit"],
              show_legend=not t["hist"].empty)
 
-    layout = {
+    fig.update_layout(
         **_BASE_LAYOUT,
-        "title": dict(text=title, font=dict(size=14, color="#E2E8F0"), x=0.01),
-    }
-    fig.update_layout(**layout)
-
+        title=dict(text=title, font=dict(size=14, color="#E2E8F0"), x=0.01),
+    )
     if dual:
         fig.update_yaxes(title_text=u1, secondary_y=False,
                          title_font=dict(color="#94A3B8", size=11))
@@ -452,90 +494,75 @@ def build_line_chart(
                          title_font=dict(color="#94A3B8", size=11))
     elif units:
         fig.update_yaxes(title_text=u1, title_font=dict(color="#94A3B8", size=11))
-
-    if any("%" in t.get("unit", "") for t in traces):
-        fig.add_hline(y=0,  line_dash="dot", line_color="rgba(148,163,184,0.25)", line_width=1)
-        fig.add_hline(y=2,  line_dash="dot", line_color="rgba(56,189,248,0.2)",   line_width=1,
-                      annotation_text="2%", annotation_font_color="rgba(56,189,248,0.5)",
+    if hline_zero:
+        fig.add_hline(y=0, line_dash="dot",
+                      line_color="rgba(148,163,184,0.25)", line_width=1)
+    if hline_2:
+        fig.add_hline(y=2, line_dash="dot",
+                      line_color="rgba(56,189,248,0.2)", line_width=1,
+                      annotation_text="2%",
+                      annotation_font_color="rgba(56,189,248,0.5)",
                       annotation_font_size=10)
-
     return fig
 
 
-def build_cpi_world_map(
-    df_all: pd.DataFrame,
-    year: int,
-    last_actual: int,
+def build_world_map(
+    df_all:       pd.DataFrame,
+    year:         int,
+    last_actual:  int,
+    ind_name:     str,
+    ind_cfg:      dict,
 ) -> go.Figure:
-    """Choropleth world map for CPI inflation in a given year."""
     if year not in df_all.columns:
         return go.Figure()
-
-    col = df_all[year].dropna()
-    is_forecast = year > last_actual
-    suffix      = "  ⟡ IMF Forecast" if is_forecast else ""
-
+    col     = df_all[year].dropna()
+    suffix  = "  ⟡ IMF Forecast" if year > last_actual else ""
     fig = go.Figure(go.Choropleth(
         locations=col.index.tolist(),
         z=col.values,
         locationmode="ISO-3",
-        colorscale=[
-            [0.00, "#0D9488"],   # teal  (deflation / very low)
-            [0.20, "#4ADE80"],   # green (~0 %)
-            [0.38, "#FEF08A"],   # yellow (~2 % target zone)
-            [0.55, "#FB923C"],   # orange (~10 %)
-            [0.75, "#EF4444"],   # red   (high inflation)
-            [1.00, "#7F1D1D"],   # dark  (hyperinflation)
-        ],
-        zmin=-5, zmax=30,
+        colorscale=ind_cfg["colorscale"],
+        zmin=ind_cfg["zmin"], zmax=ind_cfg["zmax"],
         colorbar=dict(
-            title=dict(text="CPI %", font=dict(color="#94A3B8", size=12)),
+            title=dict(text=ind_cfg["unit"], font=dict(color="#94A3B8", size=12)),
             tickfont=dict(color="#94A3B8", size=11),
             thickness=14, len=0.68,
             bgcolor="rgba(0,0,0,0.45)",
-            outlinecolor="rgba(255,255,255,0.08)",
-            outlinewidth=1,
+            outlinecolor="rgba(255,255,255,0.08)", outlinewidth=1,
         ),
         marker_line_color="rgba(255,255,255,0.12)",
         marker_line_width=0.5,
-        hovertemplate="<b>%{location}</b><br>CPI: %{z:.1f}%<extra></extra>",
+        hovertemplate=(
+            f"<b>%{{location}}</b><br>{ind_name}: "
+            f"%{{z:.1f}} {ind_cfg['unit']}<extra></extra>"
+        ),
     ))
     fig.update_layout(
-        title=dict(
-            text=f"CPI Inflation — {year}{suffix}",
-            font=dict(size=15, color="#E2E8F0"), x=0.01,
-        ),
+        title=dict(text=f"{ind_name} — {year}{suffix}",
+                   font=dict(size=15, color="#E2E8F0"), x=0.01),
         geo=_GEO,
         paper_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=0, r=0, t=50, b=0),
-        height=520,
+        margin=dict(l=0, r=0, t=50, b=0), height=520,
     )
     return fig
 
 
 def build_oil_world_map(brent: pd.Series, year: int) -> go.Figure:
-    """
-    World map shaded uniformly by the global Brent price for a given year,
-    conveying that crude oil is a single world-market commodity.
-    """
     key = pd.Period(year, freq="Y")
     if key not in brent.index:
         return go.Figure()
-
-    price = float(brent[key])
-    # All individual-country ISO-3 codes (skip aggregates like "EURO")
+    price    = float(brent[key])
     iso3_all = [v["weo"] for v in COUNTRIES.values() if len(v.get("weo", "")) == 3]
-
     fig = go.Figure(go.Choropleth(
-        locations=iso3_all,
-        z=[price] * len(iso3_all),
+        locations=iso3_all, z=[price] * len(iso3_all),
         locationmode="ISO-3",
         colorscale=[[0, "#92400E"], [0.5, "#EA580C"], [1, "#FCD34D"]],
         zmin=price * 0.9999, zmax=price * 1.0001,
         showscale=False,
-        marker_line_color="rgba(255,255,255,0.1)",
-        marker_line_width=0.5,
-        hovertemplate=f"<b>%{{location}}</b><br>Brent: ${price:.1f} / bbl ({year})<extra></extra>",
+        marker_line_color="rgba(255,255,255,0.1)", marker_line_width=0.5,
+        hovertemplate=(
+            f"<b>%{{location}}</b><br>Brent: ${price:.1f}/bbl ({year})<extra></extra>"
+        ),
     ))
     fig.update_layout(
         title=dict(
@@ -544,28 +571,27 @@ def build_oil_world_map(brent: pd.Series, year: int) -> go.Figure:
         ),
         geo={**_GEO, "landcolor": "#92400E"},
         paper_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=0, r=0, t=50, b=0),
-        height=450,
+        margin=dict(l=0, r=0, t=50, b=0), height=450,
     )
     return fig
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STREAMLIT APP
+# APP
 # ─────────────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    # ── Gradient header ────────────────────────────────────────────────────────
     st.markdown("""
     <div style="background:linear-gradient(135deg,rgba(56,189,248,0.07) 0%,
                 rgba(99,102,241,0.05) 100%);border:1px solid rgba(56,189,248,0.12);
                 border-radius:18px;padding:1.6rem 2rem;margin-bottom:1.4rem;">
       <h1 style="margin:0;font-size:1.85rem;color:#E2E8F0;font-weight:700;
-                 letter-spacing:-0.02em;">🌍 Global CPI &amp; Oil Dashboard</h1>
+                 letter-spacing:-0.02em;">📊 Data Board</h1>
       <p style="margin:0.45rem 0 0;color:rgba(148,163,184,0.75);font-size:0.88rem;">
-        Annual inflation · <b style="color:rgba(56,189,248,0.8);">IMF World Economic Outlook</b>
-        &nbsp;|&nbsp; Crude oil · <b style="color:rgba(249,115,22,0.8);">FRED</b>
-        &nbsp;·&nbsp; Dashed lines = WEO forecast
+        Macro &amp; Financial Reference Data for Accounting Professionals &nbsp;·&nbsp;
+        <b style="color:rgba(56,189,248,0.8);">IMF WEO</b> &nbsp;·&nbsp;
+        <b style="color:rgba(249,115,22,0.8);">FRED</b> &nbsp;·&nbsp;
+        <b style="color:rgba(163,230,53,0.8);">Yahoo Finance</b>
       </p>
     </div>
     """, unsafe_allow_html=True)
@@ -575,16 +601,14 @@ def main() -> None:
     # ── Sidebar ────────────────────────────────────────────────────────────────
     with st.sidebar:
         st.markdown("### ⚙️  Settings")
-
         compare_mode = st.toggle(
             "Multi-country comparison",
-            help="Plot one CPI line per country",
+            help="Plot one line per country on Macro tab",
         )
         st.markdown("---")
 
         country_list = sorted(COUNTRIES.keys())
         st.markdown("**Countries**")
-
         if compare_mode:
             sel_countries = st.multiselect(
                 "Countries (up to 10)", country_list,
@@ -603,19 +627,15 @@ def main() -> None:
         year_opts = list(range(1980, this_year + 7))
         c1, c2    = st.columns(2)
         with c1:
-            start_yr = st.selectbox("From", year_opts,
-                                    index=year_opts.index(2000),
-                                    label_visibility="visible")
+            start_yr = st.selectbox("From", year_opts, index=year_opts.index(2000))
         with c2:
-            end_yr = st.selectbox("To", year_opts,
-                                  index=year_opts.index(min(this_year + 4, year_opts[-1])),
-                                  label_visibility="visible")
+            end_yr   = st.selectbox("To",   year_opts,
+                                    index=year_opts.index(min(this_year + 4, year_opts[-1])))
 
         st.markdown("---")
         include_forecast = st.toggle("IMF WEO forecasts", value=True)
         fetch_btn = st.button("🔄  Fetch Data", type="primary", use_container_width=True)
 
-    # ── Validate ───────────────────────────────────────────────────────────────
     if not sel_countries:
         st.info("Select at least one country.")
         return
@@ -624,244 +644,407 @@ def main() -> None:
         return
 
     # ── Tabs ───────────────────────────────────────────────────────────────────
-    tab_map, tab_series, tab_oil = st.tabs([
-        "🗺️  World CPI Map",
-        "📈  CPI Time Series",
-        "🛢️  Oil Price",
+    tab_map, tab_macro, tab_rates, tab_fx, tab_mkt = st.tabs([
+        "🗺️  World Map",
+        "📈  Macro",
+        "💰  Rates & Credit",
+        "💱  FX & Oil",
+        "📊  Markets",
     ])
 
     # ─────────────────────────────────────────────────────────────────────────
-    # TAB 1 — WORLD CPI MAP
+    # TAB 1 — WORLD MAP
     # ─────────────────────────────────────────────────────────────────────────
     with tab_map:
-        st.markdown("#### CPI Inflation by Country  ·  IMF WEO")
+        ind_name = st.selectbox(
+            "Indicator", list(MAP_INDICATORS.keys()), key="map_ind",
+        )
+        ind_cfg = MAP_INDICATORS[ind_name]
 
-        with st.spinner("Loading world CPI map…"):
-            df_all, last_actual_map = fetch_weo_all_countries()
+        with st.spinner(f"Loading {ind_name} world map…"):
+            df_all, last_actual_map = fetch_weo_world(ind_cfg["weo_code"])
 
         if df_all.empty:
-            st.warning("Could not load world CPI data from IMF WEO.")
+            st.warning("Could not load data from IMF WEO.")
         else:
             map_year = st.slider(
                 "Year", min_value=max(start_yr, 1980), max_value=end_yr,
                 value=min(this_year, end_yr), step=1,
             )
-
-            fig_map = build_cpi_world_map(df_all, map_year, last_actual_map)
-            st.plotly_chart(fig_map, use_container_width=True)
-
-            # Top / bottom tables
+            st.plotly_chart(
+                build_world_map(df_all, map_year, last_actual_map, ind_name, ind_cfg),
+                use_container_width=True,
+            )
             if map_year in df_all.columns:
                 col_data = df_all[map_year].dropna().sort_values(ascending=False)
-                t1, t2 = st.columns(2)
+                t1, t2   = st.columns(2)
                 with t1:
-                    st.markdown("**🔴 Highest inflation**")
-                    top = (col_data.head(10)
-                                   .reset_index()
-                                   .rename(columns={"index": "ISO-3", map_year: "CPI %"}))
-                    top["CPI %"] = top["CPI %"].round(1)
-                    st.dataframe(top, use_container_width=True,
-                                 hide_index=True, height=310)
+                    st.markdown("**🔴 Highest**")
+                    top = (col_data.head(10).reset_index()
+                                   .rename(columns={"index": "ISO-3", map_year: ind_cfg["unit"]}))
+                    top[ind_cfg["unit"]] = top[ind_cfg["unit"]].round(1)
+                    st.dataframe(top, use_container_width=True, hide_index=True, height=310)
                 with t2:
-                    st.markdown("**🟢 Lowest inflation**")
-                    bot = (col_data.tail(10).iloc[::-1]
-                                   .reset_index()
-                                   .rename(columns={"index": "ISO-3", map_year: "CPI %"}))
-                    bot["CPI %"] = bot["CPI %"].round(1)
-                    st.dataframe(bot, use_container_width=True,
-                                 hide_index=True, height=310)
+                    st.markdown("**🟢 Lowest**")
+                    bot = (col_data.tail(10).iloc[::-1].reset_index()
+                                   .rename(columns={"index": "ISO-3", map_year: ind_cfg["unit"]}))
+                    bot[ind_cfg["unit"]] = bot[ind_cfg["unit"]].round(1)
+                    st.dataframe(bot, use_container_width=True, hide_index=True, height=310)
 
     # ─────────────────────────────────────────────────────────────────────────
-    # TAB 2 — CPI TIME SERIES
+    # TAB 2 — MACRO (CPI · GDP · Unemployment)
     # ─────────────────────────────────────────────────────────────────────────
-    with tab_series:
+    with tab_macro:
         fetch_key = (tuple(sorted(sel_countries)), start_yr, end_yr, include_forecast)
-        if "ts_cache" not in st.session_state:
-            st.session_state.ts_cache = {}
-            st.session_state.ts_key   = None
+        if "macro_cache" not in st.session_state:
+            st.session_state.macro_cache = {}
+            st.session_state.macro_key   = None
 
-        if fetch_btn or st.session_state.ts_key != fetch_key:
-            st.session_state.ts_key = fetch_key
-            cache: dict[str, tuple] = {}
-            prog = st.progress(0, text="Fetching CPI data…")
-            for i, country in enumerate(sel_countries):
-                prog.progress(i / len(sel_countries), text=f"Loading {country}…")
+        if fetch_btn or st.session_state.macro_key != fetch_key:
+            st.session_state.macro_key = fetch_key
+            cache: dict[str, dict] = {}
+            weo_tasks = [
+                ("PCPIPCH", "cpi",   "CPI"),
+                ("NGDP_RPCH", "gdp", "GDP Growth"),
+                ("LUR",    "unemp",  "Unemployment"),
+            ]
+            n_total = len(sel_countries) * len(weo_tasks)
+            prog    = st.progress(0, text="Fetching macro data…")
+            step    = 0
+            for country in sel_countries:
                 weo_iso = COUNTRIES[country].get("weo")
-                if weo_iso:
-                    ann, last_act = fetch_imf_weo(weo_iso)
-                    if not ann.empty:
-                        cut   = pd.Period(last_act, freq="Y")
-                        hist  = clip_years(ann[ann.index <= cut], start_yr, end_yr)
-                        fcast = (
-                            clip_years(ann[ann.index > cut], start_yr, end_yr)
-                            if include_forecast else pd.Series(dtype=float)
-                        )
-                        cache[country] = (hist, fcast, last_act)
-                    else:
-                        cache[country] = (pd.Series(dtype=float),
-                                          pd.Series(dtype=float), this_year - 1)
+                cd: dict[str, tuple] = {}
+                for weo_code, key, label in weo_tasks:
+                    prog.progress(step / n_total, text=f"{country} — {label}…")
+                    if weo_iso:
+                        ann, last_act = fetch_weo_series(weo_code, weo_iso)
+                        if not ann.empty:
+                            cut   = pd.Period(last_act, freq="Y")
+                            hist  = clip_years(ann[ann.index <= cut], start_yr, end_yr)
+                            fcast = (
+                                clip_years(ann[ann.index > cut], start_yr, end_yr)
+                                if include_forecast else pd.Series(dtype=float)
+                            )
+                            cd[key] = (hist, fcast, last_act)
+                        else:
+                            cd[key] = (pd.Series(dtype=float),
+                                       pd.Series(dtype=float), this_year - 1)
+                    step += 1
+                cache[country] = cd
             prog.empty()
-            st.session_state.ts_cache = cache
+            st.session_state.macro_cache = cache
 
-        ts = st.session_state.ts_cache
+        macro = st.session_state.macro_cache
 
-        if compare_mode:
-            # ── Multi-country: one chart ────────────────────────────────────
-            traces = []
-            for i, country in enumerate(sel_countries):
-                if country in ts:
-                    h, f, _ = ts[country]
-                    if not h.empty or not f.empty:
-                        traces.append({
-                            "label": country, "hist": h, "fcast": f,
-                            "unit": "%", "color": PALETTE[i % len(PALETTE)],
-                        })
-            if traces:
-                st.plotly_chart(
-                    build_line_chart(traces, "CPI Inflation (YoY %) — Country Comparison"),
-                    use_container_width=True,
-                )
-            else:
-                st.info("No data — click **Fetch Data**.")
+        ind_tabs = st.tabs(["📈 CPI Inflation", "📊 GDP Growth", "👷 Unemployment"])
+        ind_meta = [
+            ("cpi",   "CPI Inflation (YoY %)", "%", True,  True),
+            ("gdp",   "Real GDP Growth (%)",   "%", True,  False),
+            ("unemp", "Unemployment Rate (%)", "%", False, False),
+        ]
 
-        else:
-            # ── Single-country ──────────────────────────────────────────────
-            country = sel_countries[0]
-            if country in ts:
-                h, f, last_act = ts[country]
-                full = pd.concat([h, f]).dropna().sort_index()
-
-                if not full.empty:
-                    latest  = full.iloc[-1]
-                    delta   = (full.iloc[-1] - full.iloc[-2]) if len(full) >= 2 else None
-                    peak_v  = full.max()
-                    trough_v = full.min()
-
-                    m1, m2, m3 = st.columns(3)
-                    m1.metric(
-                        f"Latest CPI — {full.index[-1]}",
-                        f"{latest:.2f} %",
-                        f"{delta:+.2f} pp vs prev. year" if delta is not None else None,
-                    )
-                    m2.metric("Peak", f"{peak_v:.2f} %", str(full.idxmax()))
-                    m3.metric("Trough", f"{trough_v:.2f} %", str(full.idxmin()))
-                    st.markdown("")
-
-                if not h.empty or not f.empty:
-                    st.plotly_chart(
-                        build_line_chart(
-                            [{"label": f"CPI — {country}", "hist": h, "fcast": f,
-                              "unit": "%", "color": PALETTE[0]}],
-                            f"CPI Inflation (YoY %) — {country}  ·  IMF WEO",
-                        ),
-                        use_container_width=True,
-                    )
-            else:
-                st.info("No data — click **Fetch Data**.")
-
-        # ── Data table ─────────────────────────────────────────────────────────
-        if ts:
-            with st.expander("📋 Data table & Download"):
-                frames = []
-                for cname, (h, f, _) in ts.items():
-                    full = pd.concat([h, f]).sort_index()
-                    if not full.empty:
-                        df_tmp = full.rename(cname).to_frame()
-                        df_tmp.index = [str(p) for p in df_tmp.index]
-                        frames.append(df_tmp)
-                if frames:
-                    combined = pd.concat(frames, axis=1).sort_index(ascending=False).round(3)
-                    st.dataframe(combined, use_container_width=True, height=320)
-                    cc1, cc2 = st.columns(2)
-                    with cc1:
-                        st.download_button(
-                            "⬇️  CSV", combined.to_csv(),
-                            "cpi_data.csv", "text/csv",
+        for i_tab, (key, label, unit, hl0, hl2) in enumerate(ind_meta):
+            with ind_tabs[i_tab]:
+                if compare_mode:
+                    traces = []
+                    for i_c, country in enumerate(sel_countries):
+                        if country in macro and key in macro[country]:
+                            h, f, _ = macro[country][key]
+                            if not h.empty or not f.empty:
+                                traces.append({
+                                    "label": country, "hist": h, "fcast": f,
+                                    "unit": unit, "color": PALETTE[i_c % len(PALETTE)],
+                                })
+                    if traces:
+                        st.plotly_chart(
+                            build_line_chart(traces, f"{label} — Comparison",
+                                             hline_zero=hl0, hline_2=hl2),
                             use_container_width=True,
                         )
+                    else:
+                        st.info("No data — click **Fetch Data**.")
+                else:
+                    country = sel_countries[0]
+                    if country in macro and key in macro[country]:
+                        h, f, _ = macro[country][key]
+                        full = pd.concat([h, f]).dropna().sort_index()
+                        if not full.empty:
+                            m1, m2, m3 = st.columns(3)
+                            latest = full.iloc[-1]
+                            delta  = (full.iloc[-1] - full.iloc[-2]) if len(full) >= 2 else None
+                            m1.metric(f"Latest  ({full.index[-1]})",
+                                      f"{latest:.2f} %",
+                                      f"{delta:+.2f} pp" if delta is not None else None)
+                            m2.metric("Peak",   f"{full.max():.2f} %", str(full.idxmax()))
+                            m3.metric("Trough", f"{full.min():.2f} %", str(full.idxmin()))
+                            st.markdown("")
+                        if not h.empty or not f.empty:
+                            st.plotly_chart(
+                                build_line_chart(
+                                    [{"label": f"{label} — {country}",
+                                      "hist": h, "fcast": f,
+                                      "unit": unit, "color": PALETTE[0]}],
+                                    f"{label} — {country}  ·  IMF WEO",
+                                    hline_zero=hl0, hline_2=hl2,
+                                ),
+                                use_container_width=True,
+                            )
+                    else:
+                        st.info("No data — click **Fetch Data**.")
+
+        if macro:
+            with st.expander("📋 Data & Download"):
+                frames = []
+                for country, cd in macro.items():
+                    for key, (h, f, _) in cd.items():
+                        full = pd.concat([h, f]).sort_index()
+                        if not full.empty:
+                            col_name = f"{country} — {key.upper()}"
+                            df_tmp = full.rename(col_name).to_frame()
+                            df_tmp.index = [str(p) for p in df_tmp.index]
+                            frames.append(df_tmp)
+                if frames:
+                    combined = pd.concat(frames, axis=1).sort_index(ascending=False).round(3)
+                    st.dataframe(combined, use_container_width=True, height=300)
+                    cc1, cc2 = st.columns(2)
+                    with cc1:
+                        st.download_button("⬇️ CSV", combined.to_csv(),
+                                           "macro_data.csv", "text/csv",
+                                           use_container_width=True)
                     with cc2:
                         buf = io.BytesIO()
                         with pd.ExcelWriter(buf, engine="openpyxl") as w:
-                            combined.to_excel(w, sheet_name="CPI")
-                        st.download_button(
-                            "⬇️  Excel", buf.getvalue(), "cpi_data.xlsx",
-                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            combined.to_excel(w, sheet_name="Macro")
+                        st.download_button("⬇️ Excel", buf.getvalue(), "macro_data.xlsx",
+                                           "application/vnd.openxmlformats-officedocument"
+                                           ".spreadsheetml.sheet",
+                                           use_container_width=True)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # TAB 3 — RATES & CREDIT
+    # ─────────────────────────────────────────────────────────────────────────
+    with tab_rates:
+        r1, r2, r3 = st.tabs([
+            "🏦 Policy & Interbank",
+            "📐 Gov't Bond Yields",
+            "📉 Credit Spreads",
+        ])
+
+        with r1:
+            st.markdown("#### Central Bank Policy Rates & Interbank Benchmarks")
+            st.caption("Annual average · FRED")
+            traces = []
+            for i, (name, sid) in enumerate(POLICY_SERIES.items()):
+                s = clip_years(fetch_fred_annual(sid), start_yr, end_yr)
+                if not s.empty:
+                    traces.append({"label": name, "hist": s,
+                                   "unit": "%", "color": PALETTE[i]})
+            if traces:
+                st.plotly_chart(
+                    build_line_chart(traces, "Policy & Interbank Rates — Annual Average",
+                                     hline_zero=True),
+                    use_container_width=True,
+                )
+            else:
+                st.warning("Could not load rate data from FRED.")
+
+        with r2:
+            st.markdown("#### 10-Year Government Bond Yields")
+            st.caption("Risk-free rate proxy · used in IFRS 36 DCF, IAS 19 pensions, IFRS 16 leases · FRED")
+            traces = []
+            for i, (name, sid) in enumerate(YIELD_SERIES.items()):
+                s = clip_years(fetch_fred_annual(sid), start_yr, end_yr)
+                if not s.empty:
+                    traces.append({"label": name, "hist": s,
+                                   "unit": "%", "color": PALETTE[i]})
+            if traces:
+                st.plotly_chart(
+                    build_line_chart(traces, "10Y Government Bond Yields — Annual Average",
+                                     hline_zero=True),
+                    use_container_width=True,
+                )
+            else:
+                st.warning("Could not load yield data from FRED.")
+
+        with r3:
+            st.markdown("#### Corporate Bond Spreads — Option-Adjusted Spread (OAS)")
+            st.caption(
+                "Higher OAS = more credit risk · Used in cost of capital, impairment (IAS 36), "
+                "and fair value measurement · FRED / ICE BofA"
+            )
+            traces = []
+            for i, (name, sid) in enumerate(SPREAD_SERIES.items()):
+                s = clip_years(fetch_fred_annual(sid), start_yr, end_yr)
+                if not s.empty:
+                    traces.append({"label": name, "hist": s,
+                                   "unit": "bps", "color": PALETTE[i]})
+            if traces:
+                st.plotly_chart(
+                    build_line_chart(traces, "Corporate Bond Spreads (OAS bps) — Annual Average"),
+                    use_container_width=True,
+                )
+            else:
+                st.warning("Could not load spread data from FRED.")
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # TAB 4 — FX & OIL
+    # ─────────────────────────────────────────────────────────────────────────
+    with tab_fx:
+        fx1, fx2 = st.tabs(["💱 Exchange Rates", "🛢️ Oil Price"])
+
+        with fx1:
+            st.markdown("#### Major Exchange Rates — Annual Averages")
+            st.caption("IAS 21 foreign currency translation reference · FRED")
+            traces = []
+            for i, (name, sid) in enumerate(FX_SERIES.items()):
+                s = clip_years(fetch_fred_annual(sid), start_yr, end_yr)
+                if not s.empty:
+                    traces.append({"label": name, "hist": s,
+                                   "unit": "rate", "color": PALETTE[i]})
+            if traces:
+                st.plotly_chart(
+                    build_line_chart(traces, "Exchange Rates — Annual Average"),
+                    use_container_width=True,
+                )
+                st.caption(
+                    "EUR/USD & GBP/USD: USD per 1 unit of foreign currency "
+                    "(higher = stronger EUR/GBP).  "
+                    "JPY/USD & CNY/USD: units per 1 USD (higher = weaker local currency)."
+                )
+            else:
+                st.warning("Could not load FX data from FRED.")
+
+        with fx2:
+            st.markdown("#### Crude Oil — Global Benchmark Prices")
+            brent = clip_years(fetch_fred_annual("DCOILBRENTEU"), start_yr, end_yr)
+            wti   = clip_years(fetch_fred_annual("DCOILWTICO"),   start_yr, end_yr)
+
+            if brent.empty and wti.empty:
+                st.warning("Could not load oil data from FRED.")
+            else:
+                m1, m2, m3, m4 = st.columns(4)
+                if not brent.empty:
+                    bl = brent.iloc[-1]
+                    bd = (brent.iloc[-1] - brent.iloc[-2]) if len(brent) >= 2 else None
+                    m1.metric(f"Brent · {brent.index[-1]}",
+                              f"${bl:.1f} / bbl",
+                              f"{bd:+.1f}" if bd is not None else None)
+                    m2.metric("Brent peak", f"${brent.max():.1f} / bbl",
+                              str(brent.idxmax()))
+                if not wti.empty:
+                    wl = wti.iloc[-1]
+                    wd = (wti.iloc[-1] - wti.iloc[-2]) if len(wti) >= 2 else None
+                    m3.metric(f"WTI · {wti.index[-1]}",
+                              f"${wl:.1f} / bbl",
+                              f"{wd:+.1f}" if wd is not None else None)
+                    m4.metric("WTI peak", f"${wti.max():.1f} / bbl",
+                              str(wti.idxmax()))
+
+                oil_traces = []
+                if not brent.empty:
+                    oil_traces.append({"label": "Brent Crude",
+                                       "hist": brent, "unit": "USD/bbl",
+                                       "color": PALETTE[1]})
+                if not wti.empty:
+                    oil_traces.append({"label": "WTI Crude",
+                                       "hist": wti, "unit": "USD/bbl",
+                                       "color": PALETTE[0]})
+                if oil_traces:
+                    st.plotly_chart(
+                        build_line_chart(oil_traces, "Crude Oil Prices — Annual Average"),
+                        use_container_width=True,
+                    )
+                st.markdown("---")
+                st.markdown("#### 🌍 Oil Price World Map")
+                if not brent.empty:
+                    oil_years = [int(str(p)) for p in brent.index
+                                 if start_yr <= int(str(p)) <= end_yr]
+                    if oil_years:
+                        oil_yr = st.slider(
+                            "Year", min_value=oil_years[0], max_value=oil_years[-1],
+                            value=min(this_year, oil_years[-1]), step=1, key="oil_yr",
+                        )
+                        st.plotly_chart(
+                            build_oil_world_map(brent, oil_yr),
                             use_container_width=True,
                         )
 
     # ─────────────────────────────────────────────────────────────────────────
-    # TAB 3 — OIL PRICE
+    # TAB 5 — MARKETS
     # ─────────────────────────────────────────────────────────────────────────
-    with tab_oil:
-        st.markdown("#### Crude Oil — Global Benchmark Prices  ·  FRED")
+    with tab_mkt:
+        st.markdown("#### Equity Market Indices")
+        st.caption("Annual average of monthly close prices · Yahoo Finance")
 
-        with st.spinner("Loading oil prices…"):
-            brent = clip_years(fetch_fred_annual("DCOILBRENTEU"), start_yr, end_yr)
-            wti   = clip_years(fetch_fred_annual("DCOILWTICO"),   start_yr, end_yr)
+        with st.spinner("Loading market data…"):
+            raw_traces = []
+            for i, (name, ticker) in enumerate(EQUITY_TICKERS.items()):
+                s = clip_years(fetch_yahoo_annual(ticker), start_yr, end_yr)
+                if not s.empty:
+                    raw_traces.append({
+                        "label": name, "hist": s,
+                        "unit": "Index", "color": PALETTE[i],
+                    })
 
-        if brent.empty and wti.empty:
-            st.warning("Could not load oil price data from FRED.")
+        if not raw_traces:
+            st.warning("Could not load market data from Yahoo Finance.")
         else:
-            # ── KPI cards ────────────────────────────────────────────────────
-            m1, m2, m3, m4 = st.columns(4)
-            if not brent.empty:
-                bl = brent.iloc[-1]
-                bd = (brent.iloc[-1] - brent.iloc[-2]) if len(brent) >= 2 else None
-                m1.metric(f"Brent (latest · {brent.index[-1]})",
-                          f"${bl:.1f} / bbl",
-                          f"{bd:+.1f}" if bd is not None else None)
-                m2.metric("Brent peak", f"${brent.max():.1f} / bbl",
-                          str(brent.idxmax()))
-            if not wti.empty:
-                wl = wti.iloc[-1]
-                wd = (wti.iloc[-1] - wti.iloc[-2]) if len(wti) >= 2 else None
-                m3.metric(f"WTI (latest · {wti.index[-1]})",
-                          f"${wl:.1f} / bbl",
-                          f"{wd:+.1f}" if wd is not None else None)
-                m4.metric("WTI peak", f"${wti.max():.1f} / bbl",
-                          str(wti.idxmax()))
-
+            # KPI: latest level + YoY
+            cols = st.columns(len(raw_traces))
+            for col, t in zip(cols, raw_traces):
+                s = t["hist"]
+                latest = s.iloc[-1]
+                delta  = (s.iloc[-1] / s.iloc[-2] - 1) * 100 if len(s) >= 2 else None
+                col.metric(
+                    f"{t['label']} · {s.index[-1]}",
+                    f"{latest:,.0f}",
+                    f"{delta:+.1f} %" if delta is not None else None,
+                )
             st.markdown("")
 
-            # ── Line chart ───────────────────────────────────────────────────
-            traces_oil = []
-            if not brent.empty:
-                traces_oil.append({"label": "Brent Crude",
-                                   "hist": brent, "unit": "USD/bbl",
-                                   "color": PALETTE[1]})
-            if not wti.empty:
-                traces_oil.append({"label": "WTI Crude",
-                                   "hist": wti, "unit": "USD/bbl",
-                                   "color": PALETTE[0]})
-            if traces_oil:
+            # Level + rebased
+            norm_traces = []
+            for t in raw_traces:
+                s    = t["hist"]
+                base = s.iloc[0]
+                norm_traces.append({**t, "hist": s / base * 100, "unit": "Index (100=start)"})
+
+            col_l, col_r = st.columns(2)
+            with col_l:
                 st.plotly_chart(
-                    build_line_chart(traces_oil, "Crude Oil Prices — Annual Average"),
+                    build_line_chart(raw_traces, "Equity Indices — Level"),
+                    use_container_width=True,
+                )
+            with col_r:
+                st.plotly_chart(
+                    build_line_chart(norm_traces, f"Rebased to 100  (base = {start_yr})"),
                     use_container_width=True,
                 )
 
-            # ── World map ────────────────────────────────────────────────────
-            st.markdown("---")
-            st.markdown("#### 🌍 Oil Price World Map")
-            st.caption("Global Brent crude price for the selected year — "
-                       "one world market, one price.")
-
-            oil_years = [int(str(p)) for p in brent.index
-                         if start_yr <= int(str(p)) <= end_yr]
-            if oil_years:
-                oil_map_yr = st.slider(
-                    "Year", min_value=oil_years[0], max_value=oil_years[-1],
-                    value=min(this_year, oil_years[-1]), step=1,
-                    key="oil_map_yr",
+            # YoY returns
+            yoy_traces = []
+            for t in raw_traces:
+                s = t["hist"]
+                if len(s) >= 2:
+                    yoy = (s.pct_change(1) * 100).dropna()
+                    yoy_traces.append({
+                        **t, "hist": yoy, "unit": "%",
+                    })
+            if yoy_traces:
+                st.plotly_chart(
+                    build_line_chart(yoy_traces, "Equity Index Returns (YoY %)",
+                                     hline_zero=True),
+                    use_container_width=True,
                 )
-                fig_oil_map = build_oil_world_map(brent, oil_map_yr)
-                st.plotly_chart(fig_oil_map, use_container_width=True)
 
     # ── Footer ─────────────────────────────────────────────────────────────────
     st.markdown("---")
     st.markdown(
-        "<p style='font-size:0.78rem;color:rgba(100,116,139,0.7);text-align:center'>"
-        "CPI data · <b>IMF World Economic Outlook</b> (PCPIPCH, annual) — "
-        "Oil prices · <b>FRED</b> (Brent DCOILBRENTEU, WTI DCOILWTICO, daily → annual avg)"
+        "<p style='font-size:0.78rem;color:rgba(100,116,139,0.65);text-align:center'>"
+        "Macro: <b>IMF World Economic Outlook</b> (CPI PCPIPCH · GDP NGDP_RPCH · "
+        "Unemployment LUR) &nbsp;·&nbsp; "
+        "Rates / Spreads / FX / Oil: <b>FRED</b> &nbsp;·&nbsp; "
+        "Equity indices: <b>Yahoo Finance</b>"
         "</p>",
         unsafe_allow_html=True,
     )
