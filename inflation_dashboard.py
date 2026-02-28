@@ -303,9 +303,10 @@ def fetch_fred_annual(series_id: str) -> pd.Series:
     try:
         r = requests.get(FRED_URL, params={"id": series_id}, timeout=30)
         r.raise_for_status()
-        import io as _io
-        df = pd.read_csv(_io.StringIO(r.text), parse_dates=["DATE"])
+        df = pd.read_csv(io.StringIO(r.text))
+        # Column names vary ("DATE" vs "observation_date") — use positional
         df.columns = ["date", "value"]
+        df["date"]  = pd.to_datetime(df["date"], errors="coerce")
         df["value"] = pd.to_numeric(df["value"], errors="coerce")
         df = df.dropna().set_index("date")
         ann = df["value"].resample("YS").mean()
